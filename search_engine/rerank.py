@@ -1,57 +1,77 @@
 from transformers import AutoTokenizer, AutoModel
 import torch
 from pymongo import MongoClient
-import torch.nn.functional as F
+import numpy as np
+import faiss
 import os
 
 # Set environment variable to allow duplicate OpenMP runtime
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
-model = AutoModel.from_pretrained('vinai/phobert-base')
-tokenizer = AutoTokenizer.from_pretrained('vinai/phobert-base')
-# Kết nối đến MongoDB một lần
-uri = "mongodb+srv://admin1:vinh1950@chatbot1.r8ahn.mongodb.net/"
-client = MongoClient(uri)
-db = client['items1']
-collection = db['items_with_embedding']
-
-def get_embedding(item):
-    inputs = tokenizer(item, return_tensors='pt', padding=True, truncation=True)
-    
-    with torch.no_grad():
-        outputs = model(**inputs)
-    embeddings = outputs.last_hidden_state.mean(dim=1)  
-    
-    return embeddings.squeeze()  
-
 
 class ReRanker():
     def __init__(self):
-        pass
+        self.model = AutoModel.from_pretrained('vinai/phobert-base')
+        self.tokenizer = AutoTokenizer.from_pretrained('vinai/phobert-base')
+        # Kết nối đến MongoDB một lần
+        uri = "mongodb+srv://admin1:vinh1950@chatbot1.r8ahn.mongodb.net/"
+        self.client = MongoClient(uri)
+        self.db = self.client['items1']
+        self.collection = self.db['items_with_embedding']
+        self.index = None  # Khởi tạo chỉ mục FAISS ở đây
 
-    def rank(self, q:str, top_k:list):
-        embedding_q = get_embedding(q)
-        # print(embedding_q.shape)
-        similarities = []
-        
+    def get_embedding(self, item):
+        inputs = self.tokenizer(item, return_tensors='pt', padding=True, truncation=True)
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+        embeddings = outputs.last_hidden_state.mean(dim=1)
+        return embeddings.squeeze()
+
+    def build_index(self, embeddings):
+        dimension = embeddings.shape[1]
+        self.index = faiss.IndexFlatL2(dimension)
+        self.index.add(embeddings)
+
+    def rank(self, q: str, top_k: list, limit: int, field: str):
+        embedding_q = self.get_embedding(q).unsqueeze(0)  # Giữ nó ở dạng tensor
+        embeddings = []
+        titles = []
+
+        # Lấy embedding từ cơ sở dữ liệu cho các tài liệu trong top_k
         for doc in top_k:
             title = doc[1]
-            document = collection.find_one({'text': title})
+            document = self.collection.find_one({'title': title})
             if document is not None:
-                embedding = torch.tensor(document['embedding'])  
-                # Tính cosine similarity
-                cos = torch.cosine_similarity(embedding.unsqueeze(0), embedding_q.unsqueeze(0))
-                similarities.append((title, cos))  
-                # print(embedding.shape)
-  
+                embeddings.append(torch.tensor(document[field + '_embed']))  # Giữ nó ở dạng tensor
+                titles.append(title)
 
-        # Sắp xếp các tài liệu theo cosine similarity
+        # Chuyển đổi danh sách embeddings thành mảng tensor
+        embeddings = torch.stack(embeddings).numpy()  # Chuyển đổi thành numpy để FAISS
+
+        # Xây dựng chỉ mục FAISS
+        if self.index is None:
+            self.build_index(embeddings)
+
+        # Sử dụng FAISS để tìm kiếm các tài liệu tương tự
+        distances, indices = self.index.search(embedding_q.numpy(), limit)  # Tìm kiếm k gần nhất
+        similarities = []
+        for i in range(limit):
+            title = titles[indices[0][i]]
+            cos_similarity = 1 - distances[0][i]  # Chuyển đổi khoảng cách thành tương đồng
+            similarities.append((title, float(cos_similarity)))
+
+        # Sắp xếp và trả về các tài liệu theo cosine similarity
         sorted_similarities = sorted(similarities, key=lambda x: x[1], reverse=True)
-        
-        return sorted_similarities
-                
-
+        return sorted_similarities[:limit]
 
 if __name__ == '__main__':
+    from raw_search import BM25
     rerank = ReRanker()
-    top_k = ['Điện thoại Honor X5b (4+64GB)', 'HONOR X7c - 8GB/256GB']
-    print(rerank.rank(q='điện thoại Honnor', top_k=top_k))
+    bm25 = BM25()
+    bm25.load_data_by_using_db(field='title')
+    t = int(input())
+    for _ in range(t):
+        q = input()
+        k = 20
+        top_k = bm25.search(q, k)
+        new_top_k = rerank.rank(q, top_k, k // 2, 'title')
+        print(new_top_k)

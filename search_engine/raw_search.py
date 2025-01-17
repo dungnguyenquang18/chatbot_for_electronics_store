@@ -48,7 +48,7 @@ class BM25():
             if df > 0:
                 self.idf[word] = math.log10(self.l / df)
 
-    def load_data_by_using_db(self):
+    def load_data_by_using_db(self, field):
         uri = "mongodb+srv://admin1:vinh1950@chatbot1.r8ahn.mongodb.net/"
         client = MongoClient(uri)
         db = client['items1']
@@ -62,12 +62,10 @@ class BM25():
         items = collection2.find()
         docs = []
         for item in items:
-            docs.append((item['full'], item['title']))
+            docs.append((item[field], item['title']))
         self.load_data(docs)
 
     def search(self, q: str, k: int, use_db=True):
-
-            
         query_words = nomalize_sentence(q)
         scores = {}
         for i in range(self.l):
@@ -85,7 +83,7 @@ class BM25():
 
 if __name__ == "__main__":
     bm25 = BM25()
-    bm25.load_data_by_using_db()
+    bm25.load_data_by_using_db(field='title')
     print(bm25.search(q='samsung s24', k=10))
     
     # # Tải dữ liệu vào BM25
