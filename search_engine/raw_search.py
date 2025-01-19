@@ -17,14 +17,16 @@ class BM25():
         self.idf = {}
 
     def load_data(self, docs:list, use_data=True):
-        self.title = []
+        self.index_in_tf_idf = []
         if use_data:
-            self.title = [doc[1] for doc in docs]
+            self.index_in_tf_idf = [doc[1] for doc in docs]
             docs = [doc[0] for doc in docs]
         self.docs = docs
-        self.words_docs = [nomalize_sentence(doc) for doc in docs]
         self.l = len(self.docs)
-        self.l_docs = [len(doc) for doc in self.words_docs]
+        if not use_data:
+            self.words_docs = [nomalize_sentence(doc) for doc in docs]
+            self.l_docs = [len(doc) for doc in self.words_docs]
+            
         self.avg_doc_length = sum(self.l_docs) / self.l
 
     def build_vocab(self):
@@ -54,15 +56,17 @@ class BM25():
         db = client['items1']
         collection1 = db['tf_idf']
         collection2 = db['items_without_embedding']
-        tf_idfs = collection1.find({})
+        tf_idfs = collection1.find()
         for tf_idf in tf_idfs:
             word = tf_idf['word']
             self.tf[word] = tf_idf['tf']
             self.idf[word] = tf_idf['idf']
         items = collection2.find()
         docs = []
+        self.l_docs = []
         for item in items:
-            docs.append((item[field], item['title']))
+            docs.append((item[field], item['index_in_tf_idf']))
+            self.l_docs.append(item['len_doc'])
         self.load_data(docs)
 
     def search(self, q: str, k: int, use_db=True):
@@ -78,7 +82,7 @@ class BM25():
             scores[i] = score
         ranked_docs = sorted(scores.items(), key=lambda item: item[1], reverse=True)[:k]
         if use_db:
-            return [(self.docs[i], self.title[i]) for i, score in ranked_docs]
+            return [(self.docs[i], self.index_in_tf_idf[i], ) for i, score in ranked_docs]
         return [(self.docs[i], score) for i, score in ranked_docs]
 
 if __name__ == "__main__":
