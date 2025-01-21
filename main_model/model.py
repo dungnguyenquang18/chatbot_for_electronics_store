@@ -6,6 +6,7 @@ from IPython.display import display, Markdown
 
 class Model():
     def __init__(self):
+        #using gemini
         genai.configure(api_key="AIzaSyCpLV3fieMeLX_IrlQGq17mesLZgKeQ1Ho")
         self.model = genai.GenerativeModel("gemini-1.5-flash")
         

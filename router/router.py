@@ -14,5 +14,4 @@ class Router():
     
     
 if __name__ == '__main__':
-    r = Router()
-    print(r.redict(''))
+    pass

@@ -7,7 +7,7 @@ app = Flask(__name__)
 bm25 = BM25()
 re_ranker = ReRanker()
 model = Model()
-bm25.load_data_by_using_db(field='title')
+bm25.load_data_by_using_db()
 
 
 @app.route('/api/search', methods=['POST'])
@@ -17,20 +17,16 @@ def handle_query():
 
     if not query:
         return jsonify({'error': 'No query provided'}), 400
-    
-    clean_query = process_query(query)
 
-    filtered_results = bm25.search(q=clean_query, k=35)
-    
-    informations = re_ranker.rank(query, filtered_results, limit=10, field='full')
-    
-    answer = model.answer(clean_query, informations)
+    #raw_search
+    raw_search_informations = bm25.search(q=query, k=35)
+    #rerank 
+    informations = re_ranker.rank(q=query, top_k=raw_search_informations, limit=10)
+    #get answer by reprompting
+    answer = model.answer(query, informations)
     
     return jsonify(answer)
 
-
-def process_query(query:str):
-    return query.lower()
 
 if __name__ == '__main__':
     app.run(debug=True)
