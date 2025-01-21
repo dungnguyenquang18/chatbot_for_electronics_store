@@ -13,9 +13,9 @@ class ReRanker():
         self.tokenizer = AutoTokenizer.from_pretrained("keepitreal/vietnamese-sbert")
         self.model = AutoModel.from_pretrained("keepitreal/vietnamese-sbert")
         # Kết nối đến MongoDB một lần
-        uri = "mongodb+srv://admin1:vinh1950@chatbot1.r8ahn.mongodb.net/"
+        uri = "mongodb://localhost:27017"
         self.client = MongoClient(uri)
-        self.db = self.client['items1']
+        self.db = self.client['items']
         self.collection = self.db['items_with_embedding']
         self.index = None  # Khởi tạo chỉ mục FAISS ở đây
 
@@ -24,26 +24,26 @@ class ReRanker():
         with torch.no_grad():
             outputs = self.model(**inputs)
         embeddings = outputs.last_hidden_state.mean(dim=1)
-        return embeddings.squeeze()
+        return embeddings
 
     def build_index(self, embeddings):
         dimension = embeddings.shape[1]
-        self.index = faiss.IndexFlatL2(dimension)
+        self.index = faiss.IndexFlatIP(dimension)
         self.index.add(embeddings)
-
+    
+    def norm_vector(self, tensor:torch.Tensor):
+        return tensor/tensor.norm(dim=1, keepdim=True)
+    
     def rank(self, q: str, top_k: list, limit: int, field: str):
-        embedding_q = self.get_embedding(q).unsqueeze(0)  # Giữ nó ở dạng tensor
+        embedding_q = self.norm_vector(self.get_embedding(q))  # Giữ nó ở dạng tensor
         embeddings = []
-        titles = []
-        full = []
         # Lấy embedding từ cơ sở dữ liệu cho các tài liệu trong top_k
         for doc in top_k:
             indx = doc[1]
-            full = doc[2]
             document = self.collection.find_one({'index_in_tf_idf': indx})
             if document is not None:
                 embeddings.append(torch.tensor(document[field + '_embed']))  # Giữ nó ở dạng tensor
-                titles.append(indx)
+
 
         # Chuyển đổi danh sách embeddings thành mảng tensor
         embeddings = torch.stack(embeddings).numpy()  # Chuyển đổi thành numpy để FAISS
@@ -56,13 +56,10 @@ class ReRanker():
         distances, indices = self.index.search(embedding_q.numpy(), limit)  # Tìm kiếm k gần nhất
         similarities = []
         for i in range(limit):
-            title = titles[indices[0][i]]
-            cos_similarity = 1 - distances[0][i]  # Chuyển đổi khoảng cách thành tương đồng
-            similarities.append((full, float(cos_similarity)))
+            cos_similarity = distances[0][i]  
+            similarities.append((top_k[indices[0][i]][2], float(cos_similarity)))
 
-        # Sắp xếp và trả về các tài liệu theo cosine similarity
-        sorted_similarities = sorted(similarities, key=lambda x: x[1], reverse=True)
-        return sorted_similarities[:limit]
+        return similarities[:limit]
 
 if __name__ == '__main__':
     from raw_search import BM25

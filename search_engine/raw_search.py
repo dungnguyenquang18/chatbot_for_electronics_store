@@ -20,6 +20,7 @@ class BM25():
         self.index_in_tf_idf = []
         if use_data:
             self.index_in_tf_idf = [doc[1] for doc in docs]
+            self.full = [doc[2] for doc in docs]
             docs = [doc[0] for doc in docs]
         self.docs = docs
         self.l = len(self.docs)
@@ -51,9 +52,9 @@ class BM25():
                 self.idf[word] = math.log10(self.l / df)
 
     def load_data_by_using_db(self, field):
-        uri = "mongodb+srv://admin1:vinh1950@chatbot1.r8ahn.mongodb.net/"
+        uri = "mongodb://localhost:27017"
         client = MongoClient(uri)
-        db = client['items1']
+        db = client['items']
         collection1 = db['tf_idf']
         collection2 = db['items_without_embedding']
         tf_idfs = collection1.find()
@@ -65,7 +66,7 @@ class BM25():
         docs = []
         self.l_docs = []
         for item in items:
-            docs.append((item[field], item['index_in_tf_idf']))
+            docs.append((item[field], item['index_in_tf_idf'], item['full']))
             self.l_docs.append(item['len_doc'])
         self.load_data(docs)
 
@@ -82,7 +83,7 @@ class BM25():
             scores[i] = score
         ranked_docs = sorted(scores.items(), key=lambda item: item[1], reverse=True)[:k]
         if use_db:
-            return [(self.docs[i], self.index_in_tf_idf[i], ) for i, score in ranked_docs]
+            return [(self.docs[i], self.index_in_tf_idf[i], self.full[i] ) for i, score in ranked_docs]
         return [(self.docs[i], score) for i, score in ranked_docs]
 
 if __name__ == "__main__":
