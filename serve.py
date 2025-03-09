@@ -10,7 +10,7 @@ model = Model()
 bm25.load_data_by_using_db()
 
 
-@app.route('/api/search', methods=['POST'])
+@app.route('/api/chatbot', methods=['POST'])
 def handle_query():
     data = request.get_json()
     query = data.get('query')
@@ -21,7 +21,7 @@ def handle_query():
     #raw_search
     raw_search_informations = bm25.search(q=query, k=35)
     #rerank 
-    informations = re_ranker.rank(q=query, top_k=raw_search_informations, limit=10)
+    informations = re_ranker.rank(q=query, top_k=raw_search_informations, limit=5)
     #get answer by reprompting
     answer = model.answer(query, informations)
     

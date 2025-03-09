@@ -1,0 +1,14 @@
+bs4
+pymongo
+requests
+flask
+os
+transformers
+dotenv
+IPython
+google-genai
+pymongo
+collections
+faiss-cpu
+torch
+re

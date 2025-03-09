@@ -1,13 +1,18 @@
-from router import Router
-import pathlib
-import textwrap
+from rag_router import Router
 import google.generativeai as genai
 from IPython.display import display, Markdown
+from os import getenv
+from dotenv import load_dotenv
+
 
 class Model():
     def __init__(self):
-        #using gemini
-        genai.configure(api_key="AIzaSyCpLV3fieMeLX_IrlQGq17mesLZgKeQ1Ho")
+        # Load environment variables from .env file
+        load_dotenv()
+        api_key = getenv("API_KEY")
+        
+        # Using gemini
+        genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel("gemini-1.5-flash")
         
     def reprompt(self, q, informations):
@@ -21,10 +26,10 @@ class Model():
         prompt = q
         router = Router()
         if router.redict(informations) == 1:
-            #reprompt
+            # reprompt
             prompt = self.reprompt(q, informations)
+
             
         response = self.model.generate_content(prompt)    
         
         return response.text
-        

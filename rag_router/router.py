@@ -1,5 +1,7 @@
 #input: query 
 #output: is need to use RAG(0 or 1)
+#0: not need to use RAG
+#1: need to use RAG
 
 
 class Router():
